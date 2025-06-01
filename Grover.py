@@ -4,6 +4,16 @@ from qiskit_aer import AerSimulator
 from qiskit.visualization import plot_histogram
 from matplotlib import pyplot
 
+# Setting a local simulator backend
+backend = AerSimulator ()
+
+# Setup backend for IBM 
+# from qiskit_ibm_provider import IBMProvider
+# provider = IBMProvider()
+# backend = provider.get_backend('ibm_your_chosen_device')
+
+
+
 input_qubits = list(range(8))           # Qubits 0-7
 classical_destination = list(range(8))  # classical bits 0-7
 PHASE_ANC_INDEX = 13
@@ -136,19 +146,30 @@ def Z_f (circ):
 def Grover (circ, t):
 
     # Phase 1 prepare all qubits in a super position
-    for i in input_qubits: circ.h(i)
+    for i in input_qubits:
+        circ.reset(i)
+        circ.h(i)
 
     # Phase 2 perform t iterations of Grovers operation
     for j in range(t):
         for i in range(8, 13): circ.reset(i) # Reset ancillas 8,9,10,11 and output 12 for Z_f
         Z_f(circ)
         for i in input_qubits: circ.h(i)
-        compute_OR_fx(circ)
+        Z_or(circ)
         for i in input_qubits: circ.h(i)
 
 
-    # Phase 3 
+    # Phase 3 Measure to get a candidate solution for the search
     circ.measure(input_qubits, classical_destination)
+
+
+def classical_f (inputs):
+    gate4 = not inputs[0] and not inputs[1]
+    gate2 = inputs[2] and  inputs[3]
+    gate3 = inputs[4] and  inputs[6]
+    gate5 = gate2 and gate3
+    gate6 = gate5 and gate4
+    return not gate6
 
 
 """
@@ -162,28 +183,28 @@ a   b   ancilla a   b   result
 
 circ = QuantumCircuit (15, len(input_qubits))
 
-# For testing, assign some qubits to |1>
-#circ.x(2)
-#circ.x(3)
-#circ.x(4)
-#circ.x(6)
 
-Grover(circ=circ, t=5)
+# Optimal ~4 solutions in 8 qubits
+Grover(circ=circ, t=6)
 
-circuit_diagram = circ.draw ('mpl')
-circuit_diagram.savefig("circuit_diagram.png") # Save the circuit diagram to a file
-
-# Setting a backend
-backend = AerSimulator ()
 
 # Transpile circuit to work with the current backend .
-qc_compiled = transpile(circ, backend)
+qc_compiled = transpile(circ, backend, optimization_level=3)
 # Run the job
-# This will cause a pop where you have to authenticate with azure .
 job_sim = backend.run(qc_compiled, shots=1024)
 # Get the result
 result_sim = job_sim.result ()
-counts = result_sim.get_counts (qc_compiled)
+counts = result_sim.get_counts(qc_compiled)
+
+
+
+#circuit_diagram = circ.draw ('mpl')
+#circuit_diagram.savefig("circuit_diagram.png") # Save the circuit diagram to a file
+
+
+
+
+
 
 selected_results = {}
 threshold = 20 # Define your threshold
