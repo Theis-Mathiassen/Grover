@@ -1,3 +1,6 @@
+import json
+import math
+import os
 from qiskit import *
 import numpy as np
 from qiskit_aer import AerSimulator
@@ -6,11 +9,16 @@ from matplotlib import pyplot
 
 # Setting a local simulator backend
 backend = AerSimulator ()
+optimization_level = 1
+num_shots = 1024
+output_dir = "./results"
 
 # Setup backend for IBM 
 # from qiskit_ibm_provider import IBMProvider
 # provider = IBMProvider()
 # backend = provider.get_backend('ibm_your_chosen_device')
+# optimization_level = 3
+# num_shots = 1024
 
 
 
@@ -18,6 +26,7 @@ input_qubits = list(range(8))           # Qubits 0-7
 classical_destination = list(range(8))  # classical bits 0-7
 PHASE_ANC_INDEX = 13
 OR_RESULT_ANC_INDEX = 14
+known_solutions = False
 
 def compute_OR_fx (circ):
     """Computes OR of input_indices into or_result_anc_idx.
@@ -172,50 +181,72 @@ def classical_f (inputs):
     return not gate6
 
 
-"""
-Truth table ccx as and with ancilla being 0:
-a   b   ancilla a   b   result
-0	0	0		0	0	0
-0	1	0		0	1	0
-1	0	0		1	0	0
-1	1	0		1	1	1
-"""
+if known_solutions:
+    circ = QuantumCircuit (15, len(input_qubits))
+    # Optimal ~4 solutions in 8 qubits
+    Grover(circ=circ, t=6)
+    # Transpile circuit to work with the current backend .
+    qc_compiled = transpile(circ, backend, optimization_level=optimization_level)
+    # Run the job
+    job = backend.run(qc_compiled, shots=num_shots)
+    # Get the result
+    result = job.result ()
+    counts = result.get_counts(qc_compiled)
 
-circ = QuantumCircuit (15, len(input_qubits))
+    circuit_diagram = circ.draw ('mpl')
+    circuit_diagram.savefig(os.path.join(output_dir, "circuit_diagram.png")) # Save the circuit diagram to a file
+
+    # Plot the result
+    plot_histogram (counts)
+    pyplot.savefig(os.path.join(output_dir, "histogram.png")) # Save the plot to a file
+else:
+    # Unknown number of solutions
+    N = 2**len(input_qubits)
+    current_t = 1.0
+    max_t = (math.pi/4) * math.sqrt(N)
+    growth_factor = 1.5
+    candidates_t = []
+    while (int(round(current_t)) < max_t):
+        t_to_add = int(round(current_t))
+        candidates_t.append(t_to_add)
+        current_t *= growth_factor
+        if int(round(current_t)) <= t_to_add : # Ensure progress if rounding stalls
+            current_t = t_to_add + 1
 
 
-# Optimal ~4 solutions in 8 qubits
-Grover(circ=circ, t=6)
+    all_run_results = {}
+    for t_value in candidates_t:
+        print(f"\n--- Running Grover with t = {t_value} iterations ---")
+
+        circ = QuantumCircuit (15, len(input_qubits))
+
+        Grover(circ=circ, t=t_value)
+
+        # Transpile circuit to work with the current backend .
+        qc_compiled = transpile(circ, backend, optimization_level=optimization_level)
+        # Run the job
+        job = backend.run(qc_compiled, shots=num_shots)
+        result = job.result()
+        counts = result.get_counts(qc_compiled)
+
+        all_run_results[f"t_{t_value}"] = counts
+        print(f"Counts for t={t_value}: {counts}")
+
+        # plot and save histogram for each t
+        fig = plot_histogram(counts, title=f"Grover Results (Oracle: custom hash) for t={t_value}")
+        pyplot.savefig(os.path.join(output_dir, f"histogram_t_{t_value}.png"))
+        print(f"Histogram saved to histogram_t_{t_value}.png")
+        pyplot.close(fig) # Close the figure to free memory
+    
+    # -- SAVING to JSON --
+    json_filename = os.path.join(output_dir, "grover_all_run_results.json")
+    try:
+        with open(json_filename, 'w') as f_json:
+            json.dump(all_run_results, f_json, indent=4) # indent for pretty printing
+        print(f"\nResults saved to JSON file: {json_filename}")
+    except IOError as e:
+        print(f"Error saving to JSON: {e}")
 
 
-# Transpile circuit to work with the current backend .
-qc_compiled = transpile(circ, backend, optimization_level=3)
-# Run the job
-job_sim = backend.run(qc_compiled, shots=1024)
-# Get the result
-result_sim = job_sim.result ()
-counts = result_sim.get_counts(qc_compiled)
 
 
-
-#circuit_diagram = circ.draw ('mpl')
-#circuit_diagram.savefig("circuit_diagram.png") # Save the circuit diagram to a file
-
-
-
-
-
-
-selected_results = {}
-threshold = 20 # Define your threshold
-
-for bitstring, num_occurrences in counts.items():
-    # bitstring will be like '11001011'
-    # num_occurrences will be its corresponding value, e.g., 1
-    if num_occurrences > threshold:
-        selected_results[bitstring] = num_occurrences
-
-# Plot the result
-plot_histogram (counts)
-#plot_histogram(selected_results, title=f"Selected Results (Count > {threshold})")
-pyplot.savefig("histogram.png") # Save the plot to a file
