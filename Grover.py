@@ -1,24 +1,42 @@
 import json
 import math
 import os
+from dotenv import load_dotenv
 from qiskit import *
 import numpy as np
 from qiskit_aer import AerSimulator
 from qiskit.visualization import plot_histogram
 from matplotlib import pyplot
 
-# Setting a local simulator backend
-backend = AerSimulator ()
-optimization_level = 1
-num_shots = 1024
+# Load environment variables
 output_dir = "./results"
+use_local = False
 
-# Setup backend for IBM 
-# from qiskit_ibm_provider import IBMProvider
-# provider = IBMProvider()
-# backend = provider.get_backend('ibm_your_chosen_device')
-# optimization_level = 3
-# num_shots = 1024
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+
+load_dotenv()
+
+
+if use_local:
+    # Setting a local simulator backend
+    backend = AerSimulator ()
+    optimization_level = 1
+    num_shots = 1024
+
+else:
+    # Setup backend for azure 
+    from azure.quantum import Workspace
+    from azure.quantum.qiskit import AzureQuantumProvider
+    workspace = Workspace(resource_id=os.environ['resource_id'], location=os.environ['location'])
+    provider = AzureQuantumProvider(workspace)
+
+    print("This workspace's targets:")
+    for backend in provider.backends():
+        print("- " + backend.name())
+    backend = provider.get_backend('quantinuum.sim.h1-1sc')
+    optimization_level = 3
+    num_shots = 100
 
 
 
@@ -93,22 +111,17 @@ def Z_or (circ):
 def compute_fx(circ):
     ####    Oracle    ####
 
-    # Your provided oracle code performs the forward computation.
-    # Note: Resets are for initialization before this block, not part of the unitary.
-    # circ.reset(8) # These should be done *before* the Grover oracle block if ancillas are reused.
-    # circ.reset(9)
-    # circ.reset(10)
-    # circ.reset(11)
-    # circ.reset(12)
-
-    # Gate 0
-    circ.x(0)
-    # Gate 1
-    circ.x(1)
+    # The hash function
     # Gate 2
     circ.ccx(2, 3, 8)
     # Gate 3
     circ.ccx(4, 6, 9)
+
+    # Ensure the first 3 bits are zero
+    # Gate 0
+    circ.x(0)
+    # Gate 1
+    circ.x(1)
     # Gate 4
     circ.ccx(0,1,10)
     # Gate 5
@@ -123,14 +136,14 @@ def uncompute_fx(circ):
     circ.ccx(8,9,11)
     # Gate 4
     circ.ccx(0,1,10)
-    # Gate 3
-    circ.ccx(4, 6, 9)
-    # Gate 2
-    circ.ccx(2, 3, 8)
     # Gate 1
     circ.x(1)
     # Gate 0
     circ.x(0)
+    # Gate 3
+    circ.ccx(4, 6, 9)
+    # Gate 2
+    circ.ccx(2, 3, 8)
 
 def Z_f (circ):
     compute_fx(circ)
@@ -173,12 +186,16 @@ def Grover (circ, t):
 
 
 def classical_f (inputs):
-    gate4 = not inputs[0] and not inputs[1]
+    # The hash function
     gate2 = inputs[2] and  inputs[3]
     gate3 = inputs[4] and  inputs[6]
+    # Ensure the first 3 bits are zero
+    gate0 = not inputs[0]
+    gate1 = not inputs[1]
+    gate4 = gate0 and gate1
     gate5 = gate2 and gate3
     gate6 = gate5 and gate4
-    return not gate6
+    return gate6
 
 
 if known_solutions:
@@ -246,7 +263,3 @@ else:
         print(f"\nResults saved to JSON file: {json_filename}")
     except IOError as e:
         print(f"Error saving to JSON: {e}")
-
-
-
-
