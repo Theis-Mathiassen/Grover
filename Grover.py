@@ -56,13 +56,16 @@ input_qubits = list(range(8))           # Qubits 0-7
 classical_destination = list(range(8))  # classical bits 0-7
 PHASE_ANC_INDEX = 13
 OR_RESULT_ANC_INDEX = 14
+F_RESULT_ANC_INDEX = 12
 # Whether or not to pretend to know the number of solutions
 known_solutions = False
+
+
+# --- Helper functions ---
 
 def compute_OR_fx (circ):
     """Computes OR of input_indices into or_result_anc_idx.
        Assumes or_result_anc_idx is |0> initially.
-       Input qubits are restored to their original state by this function.
     """
     # Apply X to all input qubits (to get NOT x_i)
     for i in input_qubits:
@@ -111,6 +114,7 @@ def Z_or (circ):
     circ.cx(OR_RESULT_ANC_INDEX, PHASE_ANC_INDEX)
 
     # --- Part 3: Uncompute OR(X) ---
+    #Input qubits are restored to their original state by this function.
     uncompute_OR_fx(circ)
     
     # --- Part 4: Clean up PHASE_ANC_INDEX ---
@@ -121,8 +125,11 @@ def Z_or (circ):
 
     circ.barrier()
 
-#def oracle (circ):
+
 def compute_fx(circ):
+    """Computes f of input_indices into F_RESULT_ANC_INDEX.
+       Assumes F_RESULT_ANC_INDEX is |0> initially.
+    """
     ####    Oracle    ####
 
     # The hash function
@@ -141,11 +148,14 @@ def compute_fx(circ):
     # Gate 4
     circ.ccx(0,1,10)
     # Gate 6
-    circ.ccx(10,11,12)
+    circ.ccx(10,11,F_RESULT_ANC_INDEX)
     
 def uncompute_fx(circ):
+    """Uncomputes fx. Returns F_RESULT_ANC_INDEX to |0>.
+       Input qubits are restored to their original state by this function."""
+    
     # Gate 6
-    circ.ccx(10,11,12)
+    circ.ccx(10,11,F_RESULT_ANC_INDEX)
     # Gate 4
     circ.ccx(0,1,10)
     # Gate 1
@@ -160,6 +170,9 @@ def uncompute_fx(circ):
     circ.ccx(2, 3, 8)
 
 def Z_f (circ):
+    """Implements the Z_f gate acting on INPUT_QUBIT_INDICES.
+       Marks states where f(x)=1 with a phase kickback."""
+    
     compute_fx(circ)
 
 
@@ -167,8 +180,9 @@ def Z_f (circ):
     circ.x(PHASE_ANC_INDEX)
     circ.h(PHASE_ANC_INDEX)
 
-    circ.cx(12, PHASE_ANC_INDEX)
+    circ.cx(F_RESULT_ANC_INDEX, PHASE_ANC_INDEX)
 
+    #Input qubits are restored to their original state by this function.
     uncompute_fx(circ)
 
     # Return PHASE_ANC_INDEX from |-> basis back to |0>
@@ -179,7 +193,14 @@ def Z_f (circ):
 
     circ.barrier() # Good practice to separate logical blocks
 
+
+# --- Grover operation ---
+
 def Grover (circ, t):
+    """
+    Constructs the Grover's algorithm circuit.
+    t: The number of Grover iterations to perform.
+    """
 
     # Phase 1 prepare all qubits in a super position
     for i in input_qubits:
@@ -188,7 +209,7 @@ def Grover (circ, t):
 
     # Phase 2 perform t iterations of Grovers operation
     for j in range(t):
-        for i in range(8, 13): circ.reset(i) # Reset ancillas 8,9,10,11 and output 12 for Z_f
+        for i in range(8, 13): circ.reset(i) # Reset ancillas 8,9,10,11 and output F_RESULT_ANC_INDEX for Z_f
         Z_f(circ)
         for i in input_qubits: circ.h(i)
         Z_or(circ)
