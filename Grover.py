@@ -2,36 +2,48 @@ import json
 import math
 import os
 from dotenv import load_dotenv
-from qiskit import *
+from qiskit import QuantumCircuit, transpile, ClassicalRegister, QuantumRegister
 import numpy as np
 from qiskit_aer import AerSimulator
 from qiskit.visualization import plot_histogram
-from matplotlib import pyplot
+from matplotlib import pyplot # pyplot imported for saving figures
 
-# Load environment variables
+# --- Configuration ---
+# Load environment variables from .env file for Azure Quantum
+load_dotenv()
+
+# Directory to save results
 output_dir = "./results"
-use_local = False
-
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-load_dotenv()
-
+# --- Backend Selection ---
+# Set to False to use Azure Quantum, True for local AerSimulator
+use_local = True
 
 if use_local:
-    # Setting a local simulator backend
-    backend = AerSimulator ()
+    # Setting a local AER simulator backend
+    backend = AerSimulator()
     optimization_level = 1
+    # Number of times to run the circuit
     num_shots = 1024
-
 else:
-    # Setup backend for azure 
+    # Setup backend for Azure Quantum
+    print("Attempting to connect to Azure Quantum backend.")
     from azure.quantum import Workspace
     from azure.quantum.qiskit import AzureQuantumProvider
-    workspace = Workspace(resource_id=os.environ['resource_id'], location=os.environ['location'])
+
+    # Ensure these environment variables are set in your .env file or system
+    resource_id = os.environ.get('resource_id')
+    location = os.environ.get('location')
+
+    if not resource_id or not location:
+        raise ValueError("Azure Quantum resource_id or location not found in environment variables.")
+
+    workspace = Workspace(resource_id=resource_id, location=location)
     provider = AzureQuantumProvider(workspace)
 
-    print("This workspace's targets:")
+    print("Available Azure Quantum backends:")
     for backend in provider.backends():
         print("- " + backend.name())
     backend = provider.get_backend('quantinuum.sim.h1-1sc')
@@ -54,6 +66,7 @@ def compute_OR_fx (circ):
     # Apply X to all input qubits (to get NOT x_i)
     for i in input_qubits:
         circ.x(i)
+    
     
     # Target is ORPHASE_ANC_INDEX. It now holds AND(NOT x_i).
     circ.mcx(input_qubits, OR_RESULT_ANC_INDEX)
