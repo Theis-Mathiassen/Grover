@@ -202,23 +202,29 @@ def Grover (circ, t):
     t: The number of Grover iterations to perform.
     """
 
-    # Phase 1 prepare all qubits in a super position
+    # Step 1 prepare all qubits in a super position
     for i in input_qubits:
         circ.reset(i)
         circ.h(i)
+    circ.barrier() # Good practice to separate logical blocks
 
-    # Phase 2 perform t iterations of Grovers operation
+    # Step 2 perform t iterations of Grovers operation
     for j in range(t):
         for i in range(8, 13): circ.reset(i) # Reset ancillas 8,9,10,11 and output F_RESULT_ANC_INDEX for Z_f
         Z_f(circ)
         for i in input_qubits: circ.h(i)
+        circ.barrier() # Good practice to separate logical blocks
         Z_or(circ)
         for i in input_qubits: circ.h(i)
+        circ.barrier() # Good practice to separate logical blocks
 
 
-    # Phase 3 Measure to get a candidate solution for the search
+    # Step 3 Measure to get a candidate solution for the search
     circ.measure(input_qubits, classical_destination)
 
+
+
+# --- Main ---
 
 if __name__ == "__main__":
     # Main execution block
