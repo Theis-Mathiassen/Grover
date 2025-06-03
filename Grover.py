@@ -200,68 +200,87 @@ def Grover (circ, t):
 
 
 if __name__ == "__main__":
+    # Main execution block
+
     if known_solutions:
-        circ = QuantumCircuit (15, len(input_qubits))
-        # Optimal 4 solutions in 8 qubits is t = 6
+        # --- KNOWN SOLUTIONS MODE ---
+        # Assumes the number of solutions 's' is known, allowing for optimal 't' calculation.
+        
+        # Initialize quantum circuit: 15 total qubits, 8 classical bits for output.
+        circ = QuantumCircuit(15, len(input_qubits))
+        
+        # Optimal iterations 't' for 4 solutions in 2^8 search space.
+        # t = round( (pi/4) * sqrt(N/s) ) = round( (pi/4) * sqrt(256/4) ) ~ 6.
         Grover(circ=circ, t=6)
-        # Transpile circuit to work with the current backend .
+        
+        # Transpile for selected backend and optimization level.
         qc_compiled = transpile(circ, backend, optimization_level=optimization_level)
-        # Run the job
+        
+        # Execute the circuit 'num_shots' times.
         job = backend.run(qc_compiled, shots=num_shots)
-        # Get the result
-        result = job.result ()
-        counts = result.get_counts(qc_compiled)
+        result = job.result() # Get execution results.
+        counts = result.get_counts(qc_compiled) # Get measurement counts.
 
-        circuit_diagram = circ.draw ('mpl')
-        circuit_diagram.savefig(os.path.join(output_dir, "circuit_diagram.png")) # Save the circuit diagram to a file
+        # --- Save Circuit Diagram & Histogram ---
+        circuit_diagram = circ.draw('mpl') # Generate circuit diagram.
+        circuit_diagram.savefig(os.path.join(output_dir, "circuit_diagram.png")) # Save diagram.
 
-        # Plot the result
-        plot_histogram (counts)
-        pyplot.savefig(os.path.join(output_dir, "histogram.png")) # Save the plot to a file
+        plot_histogram(counts) # Plot measurement histogram.
+        pyplot.savefig(os.path.join(output_dir, "histogram.png")) # Save histogram.
+        pyplot.close() # Close plot to free memory.
+
     else:
-        # Unknown number of solutions
-        N = 2**len(input_qubits)
-        current_t = 1.0
-        max_t = (math.pi/4) * math.sqrt(N)
-        growth_factor = 1.5
-        candidates_t = []
+        # --- UNKNOWN SOLUTIONS MODE ---
+        # Used when 's' is unknown; iterates through different 't' values.
+        
+        N = 2**len(input_qubits) # Total items in search space.
+        current_t = 1.0 # Initial number of iterations.
+        # Heuristic maximum for t, roughly pi/4 * sqrt(N) if s=1.
+        max_t = (math.pi/4) * math.sqrt(N) 
+        growth_factor = 1.5 # Factor to increase 't' in each step.
+        candidates_t = [] # List to store 't' values to test.
+
+        # Generate a sequence of 't' values, increasing exponentially.
         while (int(round(current_t)) < max_t):
-            t_to_add = int(round(current_t))
-            candidates_t.append(t_to_add)
-            current_t *= growth_factor
-            if int(round(current_t)) <= t_to_add : # Ensure progress if rounding stalls
+            t_to_add = int(round(current_t)) # Round to nearest integer.
+            if t_to_add not in candidates_t and t_to_add > 0 : # Avoid duplicates and t=0
+                 candidates_t.append(t_to_add)
+            current_t *= growth_factor # Increase 't'.
+            if int(round(current_t)) <= t_to_add and t_to_add > 0 : # Ensure 't' progresses if rounding stalls.
                 current_t = t_to_add + 1
+        if not candidates_t and max_t >=1 : candidates_t.append(1) # Ensure at least t=1 is run.
 
 
-        all_run_results = {}
+        all_run_results = {} # Dictionary to store results for each 't'.
         for t_value in candidates_t:
+            # Loop through each candidate 't' value.
             print(f"\n--- Running Grover with t = {t_value} iterations ---")
 
-            circ = QuantumCircuit (15, len(input_qubits))
+            # Initialize new circuit for this 't_value'.
+            circ = QuantumCircuit(15, len(input_qubits))
+            Grover(circ=circ, t=t_value) # Construct Grover circuit.
 
-            Grover(circ=circ, t=t_value)
-
-            # Transpile circuit to work with the current backend .
+            # Transpile and run.
             qc_compiled = transpile(circ, backend, optimization_level=optimization_level)
-            # Run the job
             job = backend.run(qc_compiled, shots=num_shots)
             result = job.result()
             counts = result.get_counts(qc_compiled)
 
-            all_run_results[f"t_{t_value}"] = counts
+            all_run_results[f"t_{t_value}"] = counts # Store counts for this 't'.
             print(f"Counts for t={t_value}: {counts}")
 
-            # plot and save histogram for each t
+            # Plot and save histogram for current 't'.
             fig = plot_histogram(counts, title=f"Grover Results (Oracle: custom hash) for t={t_value}")
             pyplot.savefig(os.path.join(output_dir, f"histogram_t_{t_value}.png"))
             print(f"Histogram saved to histogram_t_{t_value}.png")
-            pyplot.close(fig) # Close the figure to free memory
+            pyplot.close(fig) # Close figure to free memory.
         
-        # -- SAVING to JSON --
+        # --- Save All Results to JSON ---
         json_filename = os.path.join(output_dir, "grover_all_run_results.json")
         try:
             with open(json_filename, 'w') as f_json:
-                json.dump(all_run_results, f_json, indent=4) # indent for pretty printing
+                # Dump dictionary to JSON file with pretty printing.
+                json.dump(all_run_results, f_json, indent=4) 
             print(f"\nResults saved to JSON file: {json_filename}")
         except IOError as e:
             print(f"Error saving to JSON: {e}")
