@@ -184,7 +184,7 @@ def Z_f (circ):
     circ.h(PHASE_ANC_INDEX)
     circ.x(PHASE_ANC_INDEX)
 
-    circ.barrier() # Good practice to separate logical blocks
+    circ.barrier()
 
 
 # --- Grover operation ---
@@ -198,17 +198,17 @@ def Grover (circ, t):
     # Step 1 prepare all qubits in a super position
     for i in input_qubits:
         circ.h(i)
-    circ.barrier() # Good practice to separate logical blocks
+    circ.barrier()
 
     # Step 2 perform t iterations of Grovers operation
     for j in range(t):
         for i in range(8, 13): circ.reset(i) # Reset ancillas 8,9,10,11 and output F_RESULT_ANC_INDEX for Z_f
         Z_f(circ)
         for i in input_qubits: circ.h(i)
-        circ.barrier() # Good practice to separate logical blocks
+        circ.barrier()
         Z_or(circ)
         for i in input_qubits: circ.h(i)
-        circ.barrier() # Good practice to separate logical blocks
+        circ.barrier()
 
 
     # Step 3 Measure to get a candidate solution for the search
@@ -262,8 +262,6 @@ if __name__ == "__main__":
         # Generate a sequence of 't' values, increasing exponentially.
         while (int(round(current_t)) < max_t):
             t_to_add = int(round(current_t)) # Round to nearest integer.
-            if t_to_add not in candidates_t and t_to_add > 0 : # Avoid duplicates and t=0
-                 candidates_t.append(t_to_add)
             current_t *= growth_factor # Increase 't'.
             if int(round(current_t)) <= t_to_add and t_to_add > 0 : # Ensure 't' progresses if rounding stalls.
                 current_t = t_to_add + 1
