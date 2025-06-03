@@ -99,13 +99,9 @@ def Z_or (circ):
     """Implements the Z_OR gate acting on INPUT_QUBIT_INDICES."""
     
     # --- Part 1: Compute OR(X) into OR_RESULT_ANC_INDEX ---
-    # Ensure OR_RESULT_ANC_INDEX is |0> before computation
-    circ.reset(OR_RESULT_ANC_INDEX)
     compute_OR_fx(circ)
 
     # --- Part 2: Phase Kickback ---
-    # Ensure PHASE_ANC_INDEX is |0> before preparing for kickback
-    circ.reset(PHASE_ANC_INDEX)
     # Prepare for kickback into |->
     circ.x(PHASE_ANC_INDEX)
     circ.h(PHASE_ANC_INDEX)
@@ -121,7 +117,6 @@ def Z_or (circ):
     # Return PHASE_ANC_INDEX from |-> basis back to |0>
     circ.h(PHASE_ANC_INDEX)
     circ.x(PHASE_ANC_INDEX)
-    circ.reset(PHASE_ANC_INDEX)
 
     circ.barrier()
 
@@ -188,8 +183,6 @@ def Z_f (circ):
     # Return PHASE_ANC_INDEX from |-> basis back to |0>
     circ.h(PHASE_ANC_INDEX)
     circ.x(PHASE_ANC_INDEX)
-    # Optionally, if you want to be absolutely sure it's |0> for other potential uses
-    circ.reset(PHASE_ANC_INDEX) 
 
     circ.barrier() # Good practice to separate logical blocks
 
@@ -204,7 +197,6 @@ def Grover (circ, t):
 
     # Step 1 prepare all qubits in a super position
     for i in input_qubits:
-        circ.reset(i)
         circ.h(i)
     circ.barrier() # Good practice to separate logical blocks
 
