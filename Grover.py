@@ -10,12 +10,17 @@ from qiskit_ibm_runtime.fake_provider import FakeManilaV2
 from qiskit.visualization import plot_histogram
 from matplotlib import pyplot
 
+# Optimizations
+from qiskit.circuit.library import MCMTGate
+from qiskit.circuit.library import MCXGate
+from qiskit_ibm_runtime import Options
+
 # --- Configuration ---
 # Load environment variables from .env file for Azure Quantum
 load_dotenv()
 
 # Directory to save results
-output_dir = "./results"
+output_dir = "./results/noise_mitigation"
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
@@ -33,8 +38,11 @@ else:
     # Load saved credentials
     service = QiskitRuntimeService()
     backend = service.least_busy(operational=True, simulator=False)
-    #backend = FakeManilaV2()
+
+    # Set resilience options. Level 1 is a good starting point.
+    # Initialize your Sampler with these options
     sampler = Sampler(backend)
+    
 
     optimization_level = 3
     num_shots = 1024
@@ -109,6 +117,55 @@ def Z_or (circ):
 
     circ.barrier()
 
+
+
+def Z_or_manual_optimized(circ):
+    """
+    Implements a hardware-efficient Z_OR gate by manually constructing
+    the OR logic using De Morgan's laws. This bypasses the issue with the 'or'
+    string alias in MCMTGate.
+
+    The logical implementation is: OR(inputs) = NOT(AND(NOT inputs))
+    """
+    # Define the qubits for clarity
+    control_qubits = input_qubits
+    target_qubit = OR_RESULT_ANC_INDEX
+
+    # --- Part 1: Manually compute OR(controls) into the target qubit ---
+
+    # 1. Apply NOT to all input qubits
+    circ.x(control_qubits)
+
+    # 2. Apply a standard multi-controlled X gate. This acts as an AND gate
+    #    on the negated inputs.
+    #    Qiskit's MCXGate is highly optimized internally.
+    mcx = MCXGate(num_ctrl_qubits=len(control_qubits))
+    circ.append(mcx, control_qubits + [target_qubit])
+
+    # 3. Apply NOT to all inputs again to restore them to their original state
+    circ.x(control_qubits)
+
+    # 4. Apply NOT to the target to complete the OR logic. The target now
+    #    holds the result of OR(input_qubits).
+    circ.x(target_qubit)
+
+
+    # --- Part 2: Phase Kickback (this part remains the same) ---
+    circ.x(PHASE_ANC_INDEX)
+    circ.h(PHASE_ANC_INDEX)
+    circ.cx(target_qubit, PHASE_ANC_INDEX)
+    circ.h(PHASE_ANC_INDEX)
+    circ.x(PHASE_ANC_INDEX)
+
+
+    # --- Part 3: Uncompute the OR gate to clean up ---
+    # This is the inverse of Part 1, applied in reverse order.
+    circ.x(target_qubit)                     # Inverse of step 4
+    circ.x(control_qubits)                 # Inverse of step 3
+    circ.append(mcx, control_qubits + [target_qubit])  # MCX is its own inverse
+    circ.x(control_qubits)                 # Inverse of step 1
+
+    circ.barrier()
 
 def compute_fx(circ):
     """Computes f of input_indices into F_RESULT_ANC_INDEX.
@@ -195,7 +252,7 @@ def Grover (circ, t):
         Z_f(circ)
         for i in input_qubits: circ.h(i)
         circ.barrier()
-        Z_or(circ)
+        Z_or_manual_optimized(circ)
         for i in input_qubits: circ.h(i)
         circ.barrier()
 
