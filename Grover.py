@@ -5,8 +5,10 @@ from dotenv import load_dotenv
 from qiskit import QuantumCircuit, transpile, ClassicalRegister, QuantumRegister
 import numpy as np
 from qiskit_aer import AerSimulator
+from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
+from qiskit_ibm_runtime.fake_provider import FakeManilaV2
 from qiskit.visualization import plot_histogram
-from matplotlib import pyplot # pyplot imported for saving figures
+from matplotlib import pyplot
 
 # --- Configuration ---
 # Load environment variables from .env file for Azure Quantum
@@ -19,7 +21,7 @@ if not os.path.exists(output_dir):
 
 # --- Backend Selection ---
 # Set to False to use Azure Quantum, True for local AerSimulator
-use_local = True
+use_local = False
 
 if use_local:
     # Setting a local AER simulator backend
@@ -28,27 +30,14 @@ if use_local:
     # Number of times to run the circuit
     num_shots = 1024
 else:
-    # Setup backend for Azure Quantum
-    print("Attempting to connect to Azure Quantum backend.")
-    from azure.quantum import Workspace
-    from azure.quantum.qiskit import AzureQuantumProvider
+    # Load saved credentials
+    service = QiskitRuntimeService()
+    backend = service.least_busy(operational=True, simulator=False)
+    #backend = FakeManilaV2()
+    sampler = Sampler(backend)
 
-    # Ensure these environment variables are set in your .env file or system
-    resource_id = os.environ.get('resource_id')
-    location = os.environ.get('location')
-
-    if not resource_id or not location:
-        raise ValueError("Azure Quantum resource_id or location not found in environment variables.")
-
-    workspace = Workspace(resource_id=resource_id, location=location)
-    provider = AzureQuantumProvider(workspace)
-
-    print("Available Azure Quantum backends:")
-    for backend in provider.backends():
-        print("- " + backend.name())
-    backend = provider.get_backend('quantinuum.sim.h1-1sc')
     optimization_level = 3
-    num_shots = 100
+    num_shots = 1024
 
 
 # --- Circuit configuration ---
@@ -58,7 +47,7 @@ PHASE_ANC_INDEX = 13
 OR_RESULT_ANC_INDEX = 14
 F_RESULT_ANC_INDEX = 12
 # Whether or not to pretend to know the number of solutions
-known_solutions = False
+known_solutions = True
 
 
 # --- Helper functions ---
@@ -235,19 +224,40 @@ if __name__ == "__main__":
         # Transpile for selected backend and optimization level.
         qc_compiled = transpile(circ, backend, optimization_level=optimization_level)
         
-        # Execute the circuit 'num_shots' times.
-        job = backend.run(qc_compiled, shots=num_shots)
-        result = job.result() # Get execution results.
-        counts = result.get_counts(qc_compiled) # Get measurement counts.
+        # Run the job using the sampler
+        print("Starting run")
+        try:
+            job = sampler.run([qc_compiled], shots=num_shots)
+            result = job.result()
+            print(result)
+        except Exception as e:
+            print(f"Error running job: {e}")
+        # Get the counts from the result
+        pub_result = result[0]
+        counts = job.result()[0].data.c.get_counts()
 
         # --- Save Circuit Diagram & Histogram ---
         circuit_diagram = circ.draw('mpl') # Generate circuit diagram.
         circuit_diagram.savefig(os.path.join(output_dir, "circuit_diagram.png")) # Save diagram.
 
-        plot_histogram(counts) # Plot measurement histogram.
-        pyplot.savefig(os.path.join(output_dir, "histogram.png")) # Save histogram.
+        # Filter counts to only include those within the highest 10%
+        threshold = max(counts.values()) * 0.9
+        filtered_counts = {k: v for k, v in counts.items() if v >= threshold}
+
+        # Plot measurement histogram with filtered counts
+        fig = plot_histogram(filtered_counts)
+
+        pyplot.savefig(os.path.join(output_dir, "histogram.png"), dpi=300) # Save histogram in higher quality.
         pyplot.close() # Close plot to free memory.
 
+        # Save results to a JSON file
+        json_filename = os.path.join(output_dir, "grover_known_solutions_results.json")
+        try:
+            with open(json_filename, 'w') as f_json:
+                json.dump(counts, f_json, indent=4)
+                print(f"\nResults saved to JSON file: {json_filename}")
+        except IOError as e:
+            print(f"Error saving to JSON: {e}")
     else:
         # --- UNKNOWN SOLUTIONS MODE ---
         # Used when 's' is unknown; iterates through different 't' values.
@@ -279,16 +289,30 @@ if __name__ == "__main__":
 
             # Transpile and run.
             qc_compiled = transpile(circ, backend, optimization_level=optimization_level)
-            job = backend.run(qc_compiled, shots=num_shots)
-            result = job.result()
-            counts = result.get_counts(qc_compiled)
+            try:
+                # Run the job using the sampler
+                job = sampler.run([qc_compiled], shots=num_shots)
+                result = job.result()
+                print(result)
+            except Exception as e:
+                print(f"Error running job for t={t_value}: {e}")
+                continue # Skip to the next t_value if job submission fails
+            
+            # Get the counts from the result
+            pub_result = result[0]
+            counts = job.result()[0].data.c.get_counts()
 
             all_run_results[f"t_{t_value}"] = counts # Store counts for this 't'.
             print(f"Counts for t={t_value}: {counts}")
 
-            # Plot and save histogram for current 't'.
+            # Filter counts to only include those within the highest 10%
+            threshold = max(counts.values()) * 0.9
+            filtered_counts = {k: v for k, v in counts.items() if v >= threshold}
+
+            # Plot and save histogram for current 't' with filtered counts.
+
             fig = plot_histogram(counts, title=f"Grover Results (Oracle: custom hash) for t={t_value}")
-            pyplot.savefig(os.path.join(output_dir, f"histogram_t_{t_value}.png"))
+            pyplot.savefig(os.path.join(output_dir, f"histogram_t_{t_value}.png"), dpi=300)
             print(f"Histogram saved to histogram_t_{t_value}.png")
             pyplot.close(fig) # Close figure to free memory.
         
