@@ -20,7 +20,7 @@ from qiskit_ibm_runtime import Options
 load_dotenv()
 
 # Directory to save results
-output_dir = "./results/local_sampler"
+output_dir = "./results/Local_no_reset"
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
@@ -249,7 +249,7 @@ def Grover (circ, t):
 
     # Step 2 perform t iterations of Grovers operation
     for j in range(t):
-        for i in range(8, 13): circ.reset(i) # Reset ancillas 8,9,10,11 and output F_RESULT_ANC_INDEX for Z_f
+        # for i in range(8, 13): circ.reset(i) # Reset ancillas 8,9,10,11 and output F_RESULT_ANC_INDEX for Z_f
         Z_f(circ)
         for i in input_qubits: circ.h(i)
         circ.barrier()
@@ -303,7 +303,7 @@ if __name__ == "__main__":
         filtered_counts = {k: v for k, v in counts.items() if v >= threshold}
 
         # Plot measurement histogram with filtered counts
-        fig = plot_histogram(filtered_counts)
+        fig = plot_histogram(counts)
 
         pyplot.savefig(os.path.join(output_dir, "histogram.png"), dpi=300) # Save histogram in higher quality.
         pyplot.close() # Close plot to free memory.
