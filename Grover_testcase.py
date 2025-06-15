@@ -74,20 +74,24 @@ def testOracle():
         job = backend.run(qc_compiled, shots=1)
         result = job.result() # Get execution results.
         counts = result.get_counts(qc_compiled) # Get measurement counts.
-        qaunt = -1
+        quantum = -1
         measured_outcome_str = list(counts.keys())[0]
         if measured_outcome_str == '1':
-            qaunt = 1
+            quantum = 1
         elif measured_outcome_str == '0':
-            qaunt = 0
+            quantum = 0
         else:
             print("Something has gone terrible wrong")
         qc_compiled = transpile(circ, backend, optimization_level=optimization_level)
 
-        if classic == 1 and qaunt == 1:
+        if classic == 1 and quantum == 1:
             input.reverse()
             print(f"Both the classical and the quantum algorithm gave 1 for inputs: {input}.")
-
+        else:
+            if classic == 1:
+                print(f"Error: Only classic gave 1 for inputs: {input}.")
+            if quantum == 1:
+                print(f"Error: Only quantum gave 1 for inputs: {input}.")
 
 
 if __name__ == "__main__":

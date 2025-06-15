@@ -20,17 +20,18 @@ from qiskit_ibm_runtime import Options
 load_dotenv()
 
 # Directory to save results
-output_dir = "./results/noise_mitigation"
+output_dir = "./results/local_sampler"
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 # --- Backend Selection ---
 # Set to False to use Azure Quantum, True for local AerSimulator
-use_local = False
+use_local = True
 
 if use_local:
     # Setting a local AER simulator backend
     backend = AerSimulator()
+    sampler = Sampler(backend)
     optimization_level = 1
     # Number of times to run the circuit
     num_shots = 1024
